@@ -6,6 +6,8 @@ const barraProgreso = document.getElementById('barra-progreso');
 const contador = document.getElementById('contador');
 const btnLimpiar = document.getElementById('btn-limpiar');
 const filtros = document.querySelectorAll('.filtro');
+// SONIDO AL COMPLETAR
+const sonido = new Audio('https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3');
 
 let tareas = JSON.parse(localStorage.getItem('tareas')) || [];
 let filtroActual = 'todas';
@@ -39,9 +41,11 @@ function render() {
     
     li.innerHTML = `
       <div class="form-check m-0 d-flex align-items-center">
-        <input 
+        <input
+          style="background-color: ${tarea.completada ? '#03FF79' : '#FFB803'}" 
           class="form-check-input check-tarea" 
-          type="checkbox" 
+          type="checkbox"
+
           data-id="${tarea.id}" 
           ${tarea.completada ? 'checked' : ''}
         >
@@ -49,7 +53,10 @@ function render() {
           ${tarea.texto}
         </label>
       </div>
-      <button class="btn btn-danger btn-sm btn-eliminar" data-id="${tarea.id}">Eliminar</button>
+      <div class="d-flex gap-2">
+        <button class="btn btn-warning btn-sm btn-editar" data-id="${tarea.id}">✏️Editar</button>
+        <button class="btn btn-danger btn-sm btn-eliminar" data-id="${tarea.id}">🗑️Eliminar</button>
+      </div>
     `;
     
     listaTareas.appendChild(li);
@@ -117,19 +124,81 @@ listaTareas.addEventListener('click', (e) => {
 
   // Si hizo click en el checkbox
   if (e.target.classList.contains('check-tarea')) {
-    const tarea = tareas.find(t => t.id === idTarget);
-    if (tarea) tarea.completada = e.target.checked;
-    guardarEnLocalStorage();
-    render();
+  const tarea = tareas.find(t => t.id === idTarget);
+  if (tarea) {
+    tarea.completada = e.target.checked;
+    if (tarea.completada) sonido.play();
+  }
+  guardarEnLocalStorage();
+  render();
+}
+
+ // Si hizo click en el botón eliminar (VERSIÓN MEJORADA CON SWEETALERT2)
+  if (e.target.classList.contains('btn-eliminar')) {
+    Swal.fire({
+      title: '¿Estás seguro?',
+      text: "Esta acción no se puede deshacer",
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#dc3545', // Rojo peligro de Bootstrap
+      cancelButtonColor: '#6c757d',  // Gris secundario de Bootstrap
+      confirmButtonText: 'Sí, eliminar',
+      cancelButtonText: 'Cancelar'
+    }).then((result) => {
+      // Si el usuario hace click en "Sí, eliminar"
+      if (result.isConfirmed) {
+        tareas = tareas.filter(t => t.id !== idTarget);
+        guardarEnLocalStorage();
+        render();
+
+        // Mini alerta flotante opcional para confirmar que se eliminó con éxito
+        Swal.fire({
+          title: '¡Eliminada!',
+          text: 'La tarea ha sido borrada.',
+          icon: 'success',
+          timer: 1500,
+          showConfirmButton: false
+        });
+      }
+    });
   }
 
-  // Si hizo click en el botón eliminar
-  if (e.target.classList.contains('btn-eliminar')) {
-    tareas = tareas.filter(t => t.id !== idTarget);
-    guardarEnLocalStorage();
-    render();
+
+ // Si hizo click en el botón editar (VERSIÓN MEJORADA CON SWEETALERT2)
+  if (e.target.classList.contains('btn-editar')) {
+    const tarea = tareas.find(t => t.id === idTarget);
+    if (tarea) {
+      
+      // Lanzamos la alerta personalizada
+      Swal.fire({
+        title: 'Editar tarea',
+        input: 'text',
+        inputValue: tarea.texto, 
+        showCancelButton: true,
+        confirmButtonText: 'Guardar',
+        cancelButtonText: 'Cancelar',
+        confirmButtonColor: '#198754', 
+        cancelButtonColor: '#dc3545',  
+        inputValidator: (value) => {   
+          if (!value || value.trim() === '') {
+            return '¡Por favor, escribe una tarea válida!';
+          }
+        }
+      }).then((result) => {
+        // Si el usuario confirmó y el valor es válido
+        if (result.isConfirmed) {
+          tarea.texto = result.value.trim();
+          guardarEnLocalStorage();
+          render();
+        }
+      });
+
+    }
   }
+  
 });
+
+
 
 // Manejo de los botones de Filtros
 filtros.forEach(btn => {
@@ -149,12 +218,50 @@ filtros.forEach(btn => {
   });
 });
 
-// Limpiar todas las tareas completadas
+// Limpiar todas las tareas completadas (VERSIÓN MEJORADA CON SWEETALERT2)
 btnLimpiar.addEventListener('click', () => {
-  tareas = tareas.filter(t => !t.completada);
-  guardarEnLocalStorage();
-  render();
+  // Validación extra: Verificar si realmente hay tareas completadas para limpiar
+  const tieneCompletadas = tareas.some(t => t.completada);
+
+  if (!tieneCompletadas) {
+    Swal.fire({
+      title: 'No hay tareas completadas',
+      text: 'No tienes ninguna tarea marcada como completada para eliminar.',
+      icon: 'info',
+      confirmButtonColor: '#6c757d'
+    });
+    return; // Detiene la ejecución aquí
+  }
+
+  // Si sí hay tareas completadas, pide confirmación
+  Swal.fire({
+    title: '¿Limpiar tareas completadas?',
+    text: "Se eliminarán de forma permanente todas las tareas que ya terminaste.",
+    icon: 'question',
+    showCancelButton: true,
+    confirmButtonColor: '#dc3545', // Rojo peligro de Bootstrap
+    cancelButtonColor: '#6c757d',  // Gris secundario de Bootstrap
+    confirmButtonText: 'Sí, limpiar',
+    cancelButtonText: 'Cancelar'
+  }).then((result) => {
+    if (result.isConfirmed) {
+      // Filtrar para dejar solo las NO completadas
+      tareas = tareas.filter(t => !t.completada);
+      guardarEnLocalStorage();
+      render();
+
+      // Notificación rápida de éxito
+      Swal.fire({
+        title: '¡Limpiado!',
+        text: 'Se borraron las tareas completadas.',
+        icon: 'success',
+        timer: 1500,
+        showConfirmButton: false
+      });
+    }
+  });
 });
+
 
 // CARGA INICIAL
 // Ejecutar al abrir la página por primera vez
